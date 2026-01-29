@@ -214,6 +214,26 @@ function toggleTheme() {
 
 
 // ============================================
+// Authentication
+// ============================================
+
+async function logout() {
+    try {
+        const response = await fetch('/api/auth/logout', { method: 'POST' });
+        if (response.ok) {
+            showToast('Até logo!', 'success');
+            setTimeout(() => {
+                window.location.href = '/login';
+            }, 500);
+        }
+    } catch (error) {
+        console.error('Logout error:', error);
+        window.location.href = '/login';
+    }
+}
+
+
+// ============================================
 // Export Data
 // ============================================
 

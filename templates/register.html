@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Biblioteca Pessoal - Crie sua conta">
+    <meta name="theme-color" content="#7A8B6D">
+    <title>Criar Conta - Biblioteca Pessoal</title>
+
+    <!-- PWA -->
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="apple-touch-icon" href="/static/icons/icon-192x192.png">
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="/static/css/style.css">
+
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+    <style>
+        .auth-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: var(--space-lg);
+            background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-tertiary) 100%);
+        }
+
+        .auth-card {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-xl);
+            padding: var(--space-2xl);
+            width: 100%;
+            max-width: 420px;
+            box-shadow: var(--shadow-xl);
+        }
+
+        .auth-header {
+            text-align: center;
+            margin-bottom: var(--space-2xl);
+        }
+
+        .auth-logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: var(--space-sm);
+            margin-bottom: var(--space-lg);
+        }
+
+        .auth-logo svg {
+            width: 40px;
+            height: 40px;
+            color: var(--accent-secondary);
+        }
+
+        .auth-logo h1 {
+            font-size: var(--text-2xl);
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .auth-title {
+            font-size: var(--text-xl);
+            color: var(--text-primary);
+            margin-bottom: var(--space-xs);
+        }
+
+        .auth-subtitle {
+            color: var(--text-secondary);
+            font-size: var(--text-sm);
+        }
+
+        .auth-form .form-group {
+            margin-bottom: var(--space-lg);
+        }
+
+        .auth-form .form-input {
+            background-color: var(--bg-primary);
+        }
+
+        .auth-submit {
+            width: 100%;
+            padding: var(--space-md);
+            font-size: var(--text-base);
+        }
+
+        .auth-footer {
+            text-align: center;
+            margin-top: var(--space-xl);
+            padding-top: var(--space-lg);
+            border-top: 1px solid var(--border-color-light);
+        }
+
+        .auth-footer p {
+            color: var(--text-secondary);
+            font-size: var(--text-sm);
+            margin: 0;
+        }
+
+        .auth-footer a {
+            color: var(--accent-primary);
+            font-weight: 500;
+        }
+
+        .alert {
+            padding: var(--space-md);
+            border-radius: var(--radius-md);
+            margin-bottom: var(--space-lg);
+            font-size: var(--text-sm);
+        }
+
+        .alert-error {
+            background-color: rgba(196, 92, 92, 0.15);
+            border: 1px solid rgba(196, 92, 92, 0.3);
+            color: #C45C5C;
+        }
+
+        .password-hint {
+            font-size: var(--text-xs);
+            color: var(--text-muted);
+            margin-top: var(--space-xs);
+        }
+
+        .password-match {
+            font-size: var(--text-xs);
+            margin-top: var(--space-xs);
+        }
+
+        .password-match.valid {
+            color: var(--accent-primary);
+        }
+
+        .password-match.invalid {
+            color: #C45C5C;
+        }
+
+        .features-list {
+            margin-top: var(--space-xl);
+            padding-top: var(--space-lg);
+            border-top: 1px solid var(--border-color-light);
+        }
+
+        .features-list h3 {
+            font-size: var(--text-sm);
+            color: var(--text-secondary);
+            margin-bottom: var(--space-md);
+            text-align: center;
+        }
+
+        .feature-item {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+            padding: var(--space-xs) 0;
+            color: var(--text-secondary);
+            font-size: var(--text-sm);
+        }
+
+        .feature-item svg {
+            width: 16px;
+            height: 16px;
+            color: var(--accent-primary);
+            flex-shrink: 0;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="auth-container" x-data="registerApp()">
+        <div class="auth-card" data-aos="fade-up">
+            <div class="auth-header">
+                <div class="auth-logo">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                    </svg>
+                    <h1>Biblioteca</h1>
+                </div>
+                <h2 class="auth-title">Crie sua conta</h2>
+                <p class="auth-subtitle">Organize sua coleção de livros de forma simples e elegante</p>
+            </div>
+
+            <!-- Error Message -->
+            <div class="alert alert-error" x-show="error" x-text="error" x-transition></div>
+
+            <form class="auth-form" @submit.prevent="register()">
+                <div class="form-group">
+                    <label class="form-label" for="username">Nome de usuário</label>
+                    <input type="text" id="username" class="form-input" x-model="username" required
+                        placeholder="Seu nome" autocomplete="username" minlength="3">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="email">Email</label>
+                    <input type="email" id="email" class="form-input" x-model="email" required
+                        placeholder="seu@email.com" autocomplete="email">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="password">Senha</label>
+                    <input type="password" id="password" class="form-input" x-model="password" required
+                        placeholder="••••••••" autocomplete="new-password" minlength="6">
+                    <p class="password-hint">Mínimo de 6 caracteres</p>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="confirmPassword">Confirmar Senha</label>
+                    <input type="password" id="confirmPassword" class="form-input" x-model="confirmPassword" required
+                        placeholder="••••••••" autocomplete="new-password">
+                    <p class="password-match"
+                        :class="{ 'valid': password && confirmPassword && password === confirmPassword, 'invalid': confirmPassword && password !== confirmPassword }"
+                        x-show="confirmPassword">
+                        <span x-show="password === confirmPassword">✓ Senhas coincidem</span>
+                        <span x-show="password !== confirmPassword">✗ Senhas não coincidem</span>
+                    </p>
+                </div>
+
+                <button type="submit" class="btn btn-primary auth-submit"
+                    :disabled="loading || !password || !confirmPassword || password !== confirmPassword">
+                    <span x-show="!loading">Criar Conta</span>
+                    <span x-show="loading">Criando...</span>
+                </button>
+            </form>
+
+            <div class="auth-footer">
+                <p>Já tem uma conta? <a href="/login">Fazer login</a></p>
+            </div>
+
+            <div class="features-list">
+                <h3>O que você pode fazer:</h3>
+                <div class="feature-item">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                    <span>Organizar sua biblioteca pessoal</span>
+                </div>
+                <div class="feature-item">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                    <span>Acompanhar seu progresso de leitura</span>
+                </div>
+                <div class="feature-item">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                    <span>Criar notas e citações favoritas</span>
+                </div>
+                <div class="feature-item">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                    <span>Ver estatísticas de leitura</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function registerApp() {
+            return {
+                username: '',
+                email: '',
+                password: '',
+                confirmPassword: '',
+                loading: false,
+                error: '',
+
+                async register() {
+                    this.error = '';
+
+                    if (this.password !== this.confirmPassword) {
+                        this.error = 'As senhas não coincidem';
+                        return;
+                    }
+
+                    this.loading = true;
+
+                    try {
+                        const response = await fetch('/api/auth/register', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                username: this.username,
+                                email: this.email,
+                                password: this.password
+                            })
+                        });
+
+                        const data = await response.json();
+
+                        if (!response.ok) {
+                            throw new Error(data.error || 'Erro ao criar conta');
+                        }
+
+                        // Redirect to dashboard
+                        window.location.href = '/';
+                    } catch (err) {
+                        this.error = err.message;
+                    } finally {
+                        this.loading = false;
+                    }
+                }
+            };
+        }
+    </script>
+</body>
+
+</html>

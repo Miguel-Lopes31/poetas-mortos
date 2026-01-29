@@ -1,16 +1,40 @@
 import os
 from datetime import datetime, date, timedelta
-from flask import Flask, render_template, request, jsonify, send_from_directory
+from functools import wraps
+from flask import Flask, render_template, request, jsonify, redirect, url_for
 from flask_cors import CORS
+from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from sqlalchemy import func
 from config import Config
-from models import db, Book, ReadingDiary, Note, DailyQuote, init_quotes
+from models import db, User, Book, ReadingDiary, Note, DailyQuote, init_quotes
 import random
 
 app = Flask(__name__)
 app.config.from_object(Config)
 CORS(app)
 db.init_app(app)
+
+# Flask-Login setup
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login_page'
+login_manager.login_message = 'Por favor, faça login para acessar esta página.'
+login_manager.login_message_category = 'info'
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    """Load user by ID for Flask-Login."""
+    return User.query.get(int(user_id))
+
+
+@login_manager.unauthorized_handler
+def unauthorized():
+    """Handle unauthorized access."""
+    if request.is_json or request.path.startswith('/api/'):
+        return jsonify({'error': 'Não autorizado. Faça login primeiro.'}), 401
+    return redirect(url_for('login_page'))
+
 
 # Ensure upload folder exists
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -22,16 +46,116 @@ with app.app_context():
 
 
 # ============================================
+# Auth Routes (Pages)
+# ============================================
+
+@app.route('/login')
+def login_page():
+    """Login page."""
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+    return render_template('login.html')
+
+
+@app.route('/registro')
+def register_page():
+    """Registration page."""
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+    return render_template('register.html')
+
+
+# ============================================
+# Auth API
+# ============================================
+
+@app.route('/api/auth/register', methods=['POST'])
+def register():
+    """Register a new user."""
+    data = request.get_json()
+    
+    username = data.get('username', '').strip()
+    email = data.get('email', '').strip().lower()
+    password = data.get('password', '')
+    
+    # Validation
+    if not username or len(username) < 3:
+        return jsonify({'error': 'Nome de usuário deve ter pelo menos 3 caracteres'}), 400
+    if not email or '@' not in email:
+        return jsonify({'error': 'Email inválido'}), 400
+    if not password or len(password) < 6:
+        return jsonify({'error': 'Senha deve ter pelo menos 6 caracteres'}), 400
+    
+    # Check if user already exists
+    if User.query.filter_by(email=email).first():
+        return jsonify({'error': 'Este email já está cadastrado'}), 400
+    if User.query.filter_by(username=username).first():
+        return jsonify({'error': 'Este nome de usuário já está em uso'}), 400
+    
+    # Create user
+    user = User(username=username, email=email)
+    user.set_password(password)
+    
+    db.session.add(user)
+    db.session.commit()
+    
+    # Auto login after registration
+    login_user(user, remember=True)
+    
+    return jsonify({'message': 'Conta criada com sucesso!', 'user': user.to_dict()}), 201
+
+
+@app.route('/api/auth/login', methods=['POST'])
+def login():
+    """Login user."""
+    data = request.get_json()
+    
+    email = data.get('email', '').strip().lower()
+    password = data.get('password', '')
+    remember = data.get('remember', True)
+    
+    if not email or not password:
+        return jsonify({'error': 'Email e senha são obrigatórios'}), 400
+    
+    user = User.query.filter_by(email=email).first()
+    
+    if not user or not user.check_password(password):
+        return jsonify({'error': 'Email ou senha incorretos'}), 401
+    
+    login_user(user, remember=remember)
+    
+    return jsonify({'message': 'Login realizado com sucesso!', 'user': user.to_dict()})
+
+
+@app.route('/api/auth/logout', methods=['POST'])
+@login_required
+def logout():
+    """Logout user."""
+    logout_user()
+    return jsonify({'message': 'Logout realizado com sucesso!'})
+
+
+@app.route('/api/auth/me', methods=['GET'])
+def get_current_user_info():
+    """Get current logged in user info."""
+    if current_user.is_authenticated:
+        return jsonify({'user': current_user.to_dict()})
+    return jsonify({'user': None})
+
+
+# ============================================
 # Page Routes
 # ============================================
 
 @app.route('/')
+@login_required
 def index():
     """Dashboard page."""
     return render_template('index.html')
 
 
 @app.route('/biblioteca')
+@login_required
 def library():
     """Library page."""
     return render_template('library.html')
@@ -39,30 +163,35 @@ def library():
 
 @app.route('/livro')
 @app.route('/livro/<int:book_id>')
+@login_required
 def book_page(book_id=None):
     """Book detail/edit page."""
     return render_template('book.html', book_id=book_id)
 
 
 @app.route('/fila')
+@login_required
 def queue():
     """Reading queue page."""
     return render_template('queue.html')
 
 
 @app.route('/diario')
+@login_required
 def diary():
     """Reading diary page."""
     return render_template('diary.html')
 
 
 @app.route('/estatisticas')
+@login_required
 def stats():
     """Statistics page."""
     return render_template('stats.html')
 
 
 @app.route('/notas')
+@login_required
 def notes_page():
     """Notes page."""
     return render_template('notes.html')
@@ -73,6 +202,7 @@ def notes_page():
 # ============================================
 
 @app.route('/api/books', methods=['GET'])
+@login_required
 def get_books():
     """Get all books with optional filters."""
     status = request.args.get('status')
@@ -82,7 +212,8 @@ def get_books():
     year = request.args.get('year')
     search = request.args.get('search')
     
-    query = Book.query
+    # Filter by current user
+    query = Book.query.filter_by(user_id=current_user.id)
     
     if status:
         query = query.filter(Book.status == status)
@@ -107,18 +238,21 @@ def get_books():
 
 
 @app.route('/api/books/<int:book_id>', methods=['GET'])
+@login_required
 def get_book(book_id):
     """Get a single book by ID."""
-    book = Book.query.get_or_404(book_id)
+    book = Book.query.filter_by(id=book_id, user_id=current_user.id).first_or_404()
     return jsonify(book.to_dict())
 
 
 @app.route('/api/books', methods=['POST'])
+@login_required
 def create_book():
     """Create a new book."""
     data = request.get_json()
     
     book = Book(
+        user_id=current_user.id,
         title=data.get('title'),
         author=data.get('author'),
         publisher=data.get('publisher'),
@@ -139,7 +273,7 @@ def create_book():
     )
     
     # Set queue order for new books
-    max_order = db.session.query(func.max(Book.queue_order)).scalar() or 0
+    max_order = db.session.query(func.max(Book.queue_order)).filter_by(user_id=current_user.id).scalar() or 0
     book.queue_order = max_order + 1
     
     db.session.add(book)
@@ -149,9 +283,10 @@ def create_book():
 
 
 @app.route('/api/books/<int:book_id>', methods=['PUT'])
+@login_required
 def update_book(book_id):
     """Update a book."""
-    book = Book.query.get_or_404(book_id)
+    book = Book.query.filter_by(id=book_id, user_id=current_user.id).first_or_404()
     data = request.get_json()
     
     # Update fields if provided
@@ -195,18 +330,20 @@ def update_book(book_id):
 
 
 @app.route('/api/books/<int:book_id>', methods=['DELETE'])
+@login_required
 def delete_book(book_id):
     """Delete a book."""
-    book = Book.query.get_or_404(book_id)
+    book = Book.query.filter_by(id=book_id, user_id=current_user.id).first_or_404()
     db.session.delete(book)
     db.session.commit()
     return '', 204
 
 
 @app.route('/api/books/current', methods=['GET'])
+@login_required
 def get_current_book():
     """Get the currently reading book."""
-    book = Book.query.filter_by(status='reading').order_by(Book.start_date.desc()).first()
+    book = Book.query.filter_by(user_id=current_user.id, status='reading').order_by(Book.start_date.desc()).first()
     if book:
         return jsonify(book.to_dict())
     return jsonify(None)
@@ -217,20 +354,22 @@ def get_current_book():
 # ============================================
 
 @app.route('/api/queue', methods=['GET'])
+@login_required
 def get_queue():
     """Get reading queue (want_to_read books ordered)."""
-    books = Book.query.filter_by(status='want_to_read').order_by(Book.queue_order).all()
+    books = Book.query.filter_by(user_id=current_user.id, status='want_to_read').order_by(Book.queue_order).all()
     return jsonify([book.to_dict() for book in books])
 
 
 @app.route('/api/queue/reorder', methods=['PUT'])
+@login_required
 def reorder_queue():
     """Reorder the reading queue."""
     data = request.get_json()
     order = data.get('order', [])  # List of book IDs in new order
     
     for index, book_id in enumerate(order):
-        book = Book.query.get(book_id)
+        book = Book.query.filter_by(id=book_id, user_id=current_user.id).first()
         if book:
             book.queue_order = index
     
@@ -239,9 +378,10 @@ def reorder_queue():
 
 
 @app.route('/api/books/<int:book_id>/priority', methods=['PUT'])
+@login_required
 def update_priority(book_id):
     """Update book priority."""
-    book = Book.query.get_or_404(book_id)
+    book = Book.query.filter_by(id=book_id, user_id=current_user.id).first_or_404()
     data = request.get_json()
     book.priority = data.get('priority', 'normal')
     db.session.commit()
@@ -253,12 +393,13 @@ def update_priority(book_id):
 # ============================================
 
 @app.route('/api/diary', methods=['GET'])
+@login_required
 def get_diary():
     """Get all diary entries."""
     month = request.args.get('month')
     year = request.args.get('year')
     
-    query = ReadingDiary.query
+    query = ReadingDiary.query.filter_by(user_id=current_user.id)
     
     if month and year:
         query = query.filter(
@@ -271,6 +412,7 @@ def get_diary():
 
 
 @app.route('/api/diary/<string:date_str>', methods=['GET'])
+@login_required
 def get_diary_entry(date_str):
     """Get diary entry for a specific date."""
     try:
@@ -278,13 +420,14 @@ def get_diary_entry(date_str):
     except ValueError:
         return jsonify({'error': 'Invalid date format'}), 400
     
-    entry = ReadingDiary.query.filter_by(date=entry_date).first()
+    entry = ReadingDiary.query.filter_by(user_id=current_user.id, date=entry_date).first()
     if entry:
         return jsonify(entry.to_dict())
     return jsonify(None)
 
 
 @app.route('/api/diary', methods=['POST'])
+@login_required
 def create_diary_entry():
     """Create a new diary entry."""
     data = request.get_json()
@@ -292,11 +435,12 @@ def create_diary_entry():
     entry_date = datetime.strptime(data['date'], '%Y-%m-%d').date()
     
     # Check if entry already exists for this date
-    existing = ReadingDiary.query.filter_by(date=entry_date).first()
+    existing = ReadingDiary.query.filter_by(user_id=current_user.id, date=entry_date).first()
     if existing:
         return jsonify({'error': 'Entry already exists for this date'}), 400
     
     entry = ReadingDiary(
+        user_id=current_user.id,
         book_id=data.get('book_id'),
         date=entry_date,
         pages_read=data.get('pages_read', 0),
@@ -313,9 +457,10 @@ def create_diary_entry():
 
 
 @app.route('/api/diary/<int:entry_id>', methods=['PUT'])
+@login_required
 def update_diary_entry(entry_id):
     """Update a diary entry."""
-    entry = ReadingDiary.query.get_or_404(entry_id)
+    entry = ReadingDiary.query.filter_by(id=entry_id, user_id=current_user.id).first_or_404()
     data = request.get_json()
     
     if 'book_id' in data:
@@ -336,9 +481,10 @@ def update_diary_entry(entry_id):
 
 
 @app.route('/api/diary/<int:entry_id>', methods=['DELETE'])
+@login_required
 def delete_diary_entry(entry_id):
     """Delete a diary entry."""
-    entry = ReadingDiary.query.get_or_404(entry_id)
+    entry = ReadingDiary.query.filter_by(id=entry_id, user_id=current_user.id).first_or_404()
     db.session.delete(entry)
     db.session.commit()
     return '', 204
@@ -349,21 +495,23 @@ def delete_diary_entry(entry_id):
 # ============================================
 
 @app.route('/api/stats/overview', methods=['GET'])
+@login_required
 def get_stats_overview():
     """Get dashboard overview statistics."""
-    total_books = Book.query.count()
-    books_read = Book.query.filter_by(status='read').count()
-    books_reading = Book.query.filter_by(status='reading').count()
-    books_want = Book.query.filter_by(status='want_to_read').count()
+    total_books = Book.query.filter_by(user_id=current_user.id).count()
+    books_read = Book.query.filter_by(user_id=current_user.id, status='read').count()
+    books_reading = Book.query.filter_by(user_id=current_user.id, status='reading').count()
+    books_want = Book.query.filter_by(user_id=current_user.id, status='want_to_read').count()
     
     # Pages read today
     today = date.today()
-    today_entry = ReadingDiary.query.filter_by(date=today).first()
+    today_entry = ReadingDiary.query.filter_by(user_id=current_user.id, date=today).first()
     pages_today = today_entry.pages_read if today_entry else 0
     
     # Average pages per day (last 30 days)
     thirty_days_ago = today - timedelta(days=30)
     avg_pages = db.session.query(func.avg(ReadingDiary.pages_read)).filter(
+        ReadingDiary.user_id == current_user.id,
         ReadingDiary.date >= thirty_days_ago,
         ReadingDiary.did_read == True
     ).scalar() or 0
@@ -372,7 +520,7 @@ def get_stats_overview():
     streak = calculate_streak()
     
     # Current book
-    current_book = Book.query.filter_by(status='reading').first()
+    current_book = Book.query.filter_by(user_id=current_user.id, status='reading').first()
     
     return jsonify({
         'total_books': total_books,
@@ -393,7 +541,7 @@ def calculate_streak():
     current_date = today
     
     while True:
-        entry = ReadingDiary.query.filter_by(date=current_date, did_read=True).first()
+        entry = ReadingDiary.query.filter_by(user_id=current_user.id, date=current_date, did_read=True).first()
         if entry:
             streak += 1
             current_date -= timedelta(days=1)
@@ -404,6 +552,7 @@ def calculate_streak():
 
 
 @app.route('/api/stats/pages', methods=['GET'])
+@login_required
 def get_pages_stats():
     """Get pages read statistics."""
     period = request.args.get('period', 'month')  # day, month, year
@@ -414,6 +563,7 @@ def get_pages_stats():
         # Last 30 days
         start_date = today - timedelta(days=30)
         entries = ReadingDiary.query.filter(
+            ReadingDiary.user_id == current_user.id,
             ReadingDiary.date >= start_date
         ).order_by(ReadingDiary.date).all()
         
@@ -428,6 +578,7 @@ def get_pages_stats():
             year = month_date.year
             
             total = db.session.query(func.sum(ReadingDiary.pages_read)).filter(
+                ReadingDiary.user_id == current_user.id,
                 db.extract('month', ReadingDiary.date) == month,
                 db.extract('year', ReadingDiary.date) == year
             ).scalar() or 0
@@ -442,6 +593,7 @@ def get_pages_stats():
         for i in range(4, -1, -1):
             year = today.year - i
             total = db.session.query(func.sum(ReadingDiary.pages_read)).filter(
+                ReadingDiary.user_id == current_user.id,
                 db.extract('year', ReadingDiary.date) == year
             ).scalar() or 0
             
@@ -454,12 +606,14 @@ def get_pages_stats():
 
 
 @app.route('/api/stats/publishers', methods=['GET'])
+@login_required
 def get_publishers_stats():
     """Get books count by publisher."""
     stats = db.session.query(
         Book.publisher,
         func.count(Book.id)
     ).filter(
+        Book.user_id == current_user.id,
         Book.publisher.isnot(None),
         Book.publisher != ''
     ).group_by(Book.publisher).all()
@@ -468,9 +622,11 @@ def get_publishers_stats():
 
 
 @app.route('/api/stats/spending', methods=['GET'])
+@login_required
 def get_spending_stats():
     """Get spending statistics."""
     total = db.session.query(func.sum(Book.purchase_price)).filter(
+        Book.user_id == current_user.id,
         Book.purchase_price.isnot(None)
     ).scalar() or 0
     
@@ -483,6 +639,7 @@ def get_spending_stats():
         year = month_date.year
         
         total_month = db.session.query(func.sum(Book.purchase_price)).filter(
+            Book.user_id == current_user.id,
             db.extract('month', Book.purchase_date) == month,
             db.extract('year', Book.purchase_date) == year
         ).scalar() or 0
@@ -499,10 +656,12 @@ def get_spending_stats():
 
 
 @app.route('/api/stats/reading-time', methods=['GET'])
+@login_required
 def get_reading_time_stats():
     """Get average reading time per book."""
     # Books that have both start and end dates
     books = Book.query.filter(
+        Book.user_id == current_user.id,
         Book.start_date.isnot(None),
         Book.end_date.isnot(None)
     ).all()
@@ -535,12 +694,13 @@ def get_reading_time_stats():
 # ============================================
 
 @app.route('/api/notes', methods=['GET'])
+@login_required
 def get_notes():
     """Get all notes."""
     note_type = request.args.get('type')
     book_id = request.args.get('book_id')
     
-    query = Note.query
+    query = Note.query.filter_by(user_id=current_user.id)
     
     if note_type:
         query = query.filter(Note.type == note_type)
@@ -552,18 +712,21 @@ def get_notes():
 
 
 @app.route('/api/notes/book/<int:book_id>', methods=['GET'])
+@login_required
 def get_book_notes(book_id):
     """Get all notes for a specific book."""
-    notes = Note.query.filter_by(book_id=book_id).order_by(Note.created_at.desc()).all()
+    notes = Note.query.filter_by(user_id=current_user.id, book_id=book_id).order_by(Note.created_at.desc()).all()
     return jsonify([note.to_dict() for note in notes])
 
 
 @app.route('/api/notes', methods=['POST'])
+@login_required
 def create_note():
     """Create a new note."""
     data = request.get_json()
     
     note = Note(
+        user_id=current_user.id,
         book_id=data['book_id'],
         type=data.get('type', 'thought'),
         content=data['content'],
@@ -577,9 +740,10 @@ def create_note():
 
 
 @app.route('/api/notes/<int:note_id>', methods=['PUT'])
+@login_required
 def update_note(note_id):
     """Update a note."""
-    note = Note.query.get_or_404(note_id)
+    note = Note.query.filter_by(id=note_id, user_id=current_user.id).first_or_404()
     data = request.get_json()
     
     if 'type' in data:
@@ -594,9 +758,10 @@ def update_note(note_id):
 
 
 @app.route('/api/notes/<int:note_id>', methods=['DELETE'])
+@login_required
 def delete_note(note_id):
     """Delete a note."""
-    note = Note.query.get_or_404(note_id)
+    note = Note.query.filter_by(id=note_id, user_id=current_user.id).first_or_404()
     db.session.delete(note)
     db.session.commit()
     return '', 204
@@ -621,11 +786,12 @@ def get_random_quote():
 # ============================================
 
 @app.route('/api/export', methods=['GET'])
+@login_required
 def export_data():
     """Export all data as JSON."""
-    books = [book.to_dict() for book in Book.query.all()]
-    diary = [entry.to_dict() for entry in ReadingDiary.query.all()]
-    notes = [note.to_dict() for note in Note.query.all()]
+    books = [book.to_dict() for book in Book.query.filter_by(user_id=current_user.id).all()]
+    diary = [entry.to_dict() for entry in ReadingDiary.query.filter_by(user_id=current_user.id).all()]
+    notes = [note.to_dict() for note in Note.query.filter_by(user_id=current_user.id).all()]
     
     return jsonify({
         'books': books,
@@ -640,19 +806,23 @@ def export_data():
 # ============================================
 
 @app.route('/api/filters', methods=['GET'])
+@login_required
 def get_filters():
     """Get available filter values."""
     authors = db.session.query(Book.author).filter(
+        Book.user_id == current_user.id,
         Book.author.isnot(None),
         Book.author != ''
     ).distinct().all()
     
     publishers = db.session.query(Book.publisher).filter(
+        Book.user_id == current_user.id,
         Book.publisher.isnot(None),
         Book.publisher != ''
     ).distinct().all()
     
     genres = db.session.query(Book.genre).filter(
+        Book.user_id == current_user.id,
         Book.genre.isnot(None),
         Book.genre != ''
     ).distinct().all()
