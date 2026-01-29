@@ -6,7 +6,13 @@ load_dotenv()
 class Config:
     """Application configuration."""
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-biblioteca-pessoal'
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or 'sqlite:///database.db'
+    
+    # Database configuration (supports both SQLite and PostgreSQL/Supabase)
+    database_url = os.environ.get('DATABASE_URL') or 'sqlite:///database.db'
+    # Fix for Supabase/Heroku: postgres:// -> postgresql://
+    if database_url.startswith('postgres://'):
+        database_url = database_url.replace('postgres://', 'postgresql://', 1)
+    SQLALCHEMY_DATABASE_URI = database_url
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # Upload settings
