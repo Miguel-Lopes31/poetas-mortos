@@ -1,0 +1,450 @@
+{% extends "base.html" %}
+
+{% block title %}Diário de Leitura - Biblioteca Pessoal{% endblock %}
+
+{% block content %}
+<div x-data="diaryApp()" x-init="init()">
+    <!-- Page Header -->
+    <header class="page-header">
+        <div class="flex justify-between items-center">
+            <div>
+                <h1 class="page-title">Diário de Leitura</h1>
+                <p class="page-subtitle">Registre sua jornada literária dia a dia</p>
+            </div>
+            <button class="btn btn-primary btn-lg" @click="openModal()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                Registrar Hoje
+            </button>
+        </div>
+    </header>
+
+    <!-- Month Navigation -->
+    <div class="card" style="margin-bottom: var(--space-xl);" data-aos="fade-up">
+        <div class="flex justify-between items-center">
+            <button class="btn btn-secondary" @click="prevMonth()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+                Anterior
+            </button>
+
+            <h3 x-text="getMonthName(currentMonth, currentYear)" style="font-family: var(--font-serif);"></h3>
+
+            <button class="btn btn-secondary" @click="nextMonth()">
+                Próximo
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- Calendar Grid -->
+    <div class="card" data-aos="fade-up" data-aos-delay="100">
+        <div class="diary-grid">
+            <!-- Day Headers -->
+            <div class="diary-day-header">Dom</div>
+            <div class="diary-day-header">Seg</div>
+            <div class="diary-day-header">Ter</div>
+            <div class="diary-day-header">Qua</div>
+            <div class="diary-day-header">Qui</div>
+            <div class="diary-day-header">Sex</div>
+            <div class="diary-day-header">Sáb</div>
+
+            <!-- Calendar Days -->
+            <template x-for="day in calendarDays" :key="day.date || day.empty">
+                <div class="diary-day" :class="{
+                         'empty': day.empty,
+                         'today': day.isToday,
+                         'has-entry': day.entry?.did_read,
+                         'no-read': day.entry && !day.entry.did_read
+                     }" @click="day.empty ? null : openModal(day.date)">
+                    <template x-if="!day.empty">
+                        <span class="diary-day-number" x-text="day.dayNumber"></span>
+                    </template>
+                    <template x-if="day.entry?.pages_read">
+                        <span class="diary-day-pages" x-text="day.entry.pages_read + 'p'"></span>
+                    </template>
+                    <template x-if="day.entry && !day.entry.did_read">
+                        <span style="font-size: 10px;">💤</span>
+                    </template>
+                </div>
+            </template>
+        </div>
+
+        <!-- Legend -->
+        <div class="flex gap-lg" style="margin-top: var(--space-xl); justify-content: center;">
+            <div class="flex items-center gap-sm">
+                <div style="width: 16px; height: 16px; background: rgba(122, 139, 109, 0.1); border-radius: 4px;"></div>
+                <span style="font-size: var(--text-sm); color: var(--text-secondary);">Leu</span>
+            </div>
+            <div class="flex items-center gap-sm">
+                <div style="width: 16px; height: 16px; background: rgba(168, 168, 168, 0.1); border-radius: 4px;"></div>
+                <span style="font-size: var(--text-sm); color: var(--text-secondary);">Não leu</span>
+            </div>
+            <div class="flex items-center gap-sm">
+                <div style="width: 16px; height: 16px; border: 2px solid var(--accent-secondary); border-radius: 4px;">
+                </div>
+                <span style="font-size: var(--text-sm); color: var(--text-secondary);">Hoje</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Entries -->
+    <div class="card" style="margin-top: var(--space-xl);" data-aos="fade-up" data-aos-delay="200">
+        <h3 style="margin-bottom: var(--space-lg);">📝 Entradas Recentes</h3>
+
+        <template x-if="entries.length === 0">
+            <p style="color: var(--text-secondary);">Nenhuma entrada registrada ainda.</p>
+        </template>
+
+        <div style="display: flex; flex-direction: column; gap: var(--space-md);">
+            <template x-for="entry in entries.slice(0, 10)" :key="entry.id">
+                <div
+                    style="display: flex; align-items: center; gap: var(--space-md); padding: var(--space-md); background: var(--bg-tertiary); border-radius: var(--radius-md);">
+                    <span style="font-size: var(--text-lg);" x-text="entry.did_read ? '📖' : '💤'"></span>
+                    <div style="flex: 1;">
+                        <p style="font-weight: 500;" x-text="formatDate(entry.date)"></p>
+                        <template x-if="entry.did_read">
+                            <p style="font-size: var(--text-sm); color: var(--text-secondary);">
+                                <span x-text="entry.pages_read || 0"></span> páginas
+                                <template x-if="entry.book_title">
+                                    - <em x-text="entry.book_title"></em>
+                                </template>
+                                <template x-if="entry.reading_time">
+                                    (<span x-text="entry.reading_time"></span> min)
+                                </template>
+                            </p>
+                        </template>
+                        <template x-if="!entry.did_read">
+                            <p style="font-size: var(--text-sm); color: var(--text-secondary);"
+                                x-text="entry.skip_reason || 'Não leu'"></p>
+                        </template>
+                    </div>
+                    <button class="btn btn-secondary btn-icon" @click="openModal(entry.date, entry)">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                        </svg>
+                    </button>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- Entry Modal -->
+    <div class="modal-overlay" :class="{ 'active': modalOpen }" @click.self="closeModal()">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title" x-text="editingEntry ? 'Editar Entrada' : 'Nova Entrada'"></h3>
+                <button class="modal-close" @click="closeModal()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <form @submit.prevent="saveEntry()">
+                <div class="form-group">
+                    <label class="form-label">Data</label>
+                    <input type="date" class="form-input" x-model="form.date" :disabled="editingEntry">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Você leu hoje?</label>
+                    <div class="flex gap-md">
+                        <button type="button" class="btn" :class="form.did_read ? 'btn-primary' : 'btn-outline'"
+                            @click="form.did_read = true">
+                            📖 Sim, li!
+                        </button>
+                        <button type="button" class="btn" :class="!form.did_read ? 'btn-primary' : 'btn-outline'"
+                            @click="form.did_read = false">
+                            💤 Não li
+                        </button>
+                    </div>
+                </div>
+
+                <template x-if="form.did_read">
+                    <div>
+                        <div class="form-group">
+                            <label class="form-label">Livro</label>
+                            <select class="form-select" x-model="form.book_id">
+                                <option value="">Selecione um livro...</option>
+                                <template x-for="book in readingBooks" :key="book.id">
+                                    <option :value="book.id" x-text="book.title"></option>
+                                </template>
+                            </select>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">Páginas lidas</label>
+                                <input type="number" class="form-input" x-model.number="form.pages_read" min="0"
+                                    placeholder="Ex: 25">
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">Tempo (minutos)</label>
+                                <input type="number" class="form-input" x-model.number="form.reading_time" min="0"
+                                    placeholder="Ex: 30">
+                            </div>
+                        </div>
+                    </div>
+                </template>
+
+                <template x-if="!form.did_read">
+                    <div class="form-group">
+                        <label class="form-label">Por que não leu?</label>
+                        <select class="form-select" x-model="form.skip_reason">
+                            <option value="">Selecione...</option>
+                            <option value="Cansaço">Cansaço</option>
+                            <option value="Trabalho">Trabalho</option>
+                            <option value="Falta de tempo">Falta de tempo</option>
+                            <option value="Esqueci">Esqueci</option>
+                            <option value="Não estava no clima">Não estava no clima</option>
+                            <option value="Outro">Outro</option>
+                        </select>
+                    </div>
+                </template>
+
+                <div class="form-group">
+                    <label class="form-label">Observações</label>
+                    <textarea class="form-textarea" x-model="form.notes" rows="3"
+                        placeholder="Como foi a leitura de hoje?"></textarea>
+                </div>
+
+                <div class="flex gap-md justify-between">
+                    <template x-if="editingEntry">
+                        <button type="button" class="btn btn-danger" @click="deleteEntry()">
+                            Excluir
+                        </button>
+                    </template>
+                    <template x-if="!editingEntry">
+                        <div></div>
+                    </template>
+                    <button type="submit" class="btn btn-primary">
+                        Salvar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function diaryApp() {
+        const today = new Date();
+
+        return {
+            loading: true,
+            entries: [],
+            readingBooks: [],
+            currentMonth: today.getMonth() + 1,
+            currentYear: today.getFullYear(),
+            calendarDays: [],
+            modalOpen: false,
+            editingEntry: null,
+            form: {
+                date: today.toISOString().split('T')[0],
+                book_id: '',
+                pages_read: null,
+                reading_time: null,
+                did_read: true,
+                skip_reason: '',
+                notes: ''
+            },
+
+            async init() {
+                await Promise.all([
+                    this.loadEntries(),
+                    this.loadReadingBooks()
+                ]);
+                this.buildCalendar();
+                this.loading = false;
+            },
+
+            async loadEntries() {
+                try {
+                    const response = await fetch(`/api/diary?month=${this.currentMonth}&year=${this.currentYear}`);
+                    this.entries = await response.json();
+                } catch (error) {
+                    console.error('Erro ao carregar diário:', error);
+                }
+            },
+
+            async loadReadingBooks() {
+                try {
+                    const response = await fetch('/api/books?status=reading');
+                    this.readingBooks = await response.json();
+                } catch (error) {
+                    console.error('Erro ao carregar livros:', error);
+                }
+            },
+
+            buildCalendar() {
+                const firstDay = new Date(this.currentYear, this.currentMonth - 1, 1);
+                const lastDay = new Date(this.currentYear, this.currentMonth, 0);
+                const startDayOfWeek = firstDay.getDay();
+                const daysInMonth = lastDay.getDate();
+
+                const today = new Date();
+                const todayStr = today.toISOString().split('T')[0];
+
+                this.calendarDays = [];
+
+                // Empty cells before first day
+                for (let i = 0; i < startDayOfWeek; i++) {
+                    this.calendarDays.push({ empty: true });
+                }
+
+                // Days of month
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const dateStr = `${this.currentYear}-${String(this.currentMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                    const entry = this.entries.find(e => e.date === dateStr);
+
+                    this.calendarDays.push({
+                        dayNumber: day,
+                        date: dateStr,
+                        isToday: dateStr === todayStr,
+                        entry: entry
+                    });
+                }
+            },
+
+            prevMonth() {
+                if (this.currentMonth === 1) {
+                    this.currentMonth = 12;
+                    this.currentYear--;
+                } else {
+                    this.currentMonth--;
+                }
+                this.loadEntries().then(() => this.buildCalendar());
+            },
+
+            nextMonth() {
+                if (this.currentMonth === 12) {
+                    this.currentMonth = 1;
+                    this.currentYear++;
+                } else {
+                    this.currentMonth++;
+                }
+                this.loadEntries().then(() => this.buildCalendar());
+            },
+
+            getMonthName(month, year) {
+                const months = [
+                    'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+                    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+                ];
+                return `${months[month - 1]} ${year}`;
+            },
+
+            formatDate(dateStr) {
+                const date = new Date(dateStr + 'T00:00:00');
+                return date.toLocaleDateString('pt-BR', {
+                    weekday: 'short',
+                    day: 'numeric',
+                    month: 'short'
+                });
+            },
+
+            openModal(date = null, entry = null) {
+                const today = new Date().toISOString().split('T')[0];
+
+                this.editingEntry = entry;
+
+                if (entry) {
+                    this.form = {
+                        date: entry.date,
+                        book_id: entry.book_id || '',
+                        pages_read: entry.pages_read,
+                        reading_time: entry.reading_time,
+                        did_read: entry.did_read,
+                        skip_reason: entry.skip_reason || '',
+                        notes: entry.notes || ''
+                    };
+                } else {
+                    this.form = {
+                        date: date || today,
+                        book_id: this.readingBooks.length > 0 ? this.readingBooks[0].id : '',
+                        pages_read: null,
+                        reading_time: null,
+                        did_read: true,
+                        skip_reason: '',
+                        notes: ''
+                    };
+                }
+
+                this.modalOpen = true;
+            },
+
+            closeModal() {
+                this.modalOpen = false;
+                this.editingEntry = null;
+            },
+
+            async saveEntry() {
+                try {
+                    const url = this.editingEntry
+                        ? `/api/diary/${this.editingEntry.id}`
+                        : '/api/diary';
+                    const method = this.editingEntry ? 'PUT' : 'POST';
+
+                    const data = {
+                        ...this.form,
+                        book_id: this.form.book_id || null
+                    };
+
+                    const response = await fetch(url, {
+                        method: method,
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+
+                    if (!response.ok) {
+                        const error = await response.json();
+                        throw new Error(error.error || 'Erro ao salvar');
+                    }
+
+                    showToast('Entrada salva!', 'success');
+                    this.closeModal();
+                    await this.loadEntries();
+                    this.buildCalendar();
+                } catch (error) {
+                    console.error('Erro ao salvar entrada:', error);
+                    showToast(error.message || 'Erro ao salvar entrada', 'error');
+                }
+            },
+
+            async deleteEntry() {
+                if (!confirm('Tem certeza que deseja excluir esta entrada?')) return;
+
+                try {
+                    await fetch(`/api/diary/${this.editingEntry.id}`, {
+                        method: 'DELETE'
+                    });
+
+                    showToast('Entrada excluída!', 'success');
+                    this.closeModal();
+                    await this.loadEntries();
+                    this.buildCalendar();
+                } catch (error) {
+                    console.error('Erro ao excluir entrada:', error);
+                    showToast('Erro ao excluir entrada', 'error');
+                }
+            }
+        };
+    }
+</script>
+{% endblock %}

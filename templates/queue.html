@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+
+{% block title %}Fila de Leitura - Biblioteca Pessoal{% endblock %}
+
+{% block content %}
+<div x-data="queueApp()" x-init="init()">
+    <!-- Page Header -->
+    <header class="page-header">
+        <h1 class="page-title">Fila de Leitura</h1>
+        <p class="page-subtitle">Arraste para reorganizar seus próximos livros</p>
+    </header>
+
+    <!-- Loading -->
+    <template x-if="loading">
+        <div class="loading">
+            <div class="spinner"></div>
+        </div>
+    </template>
+
+    <!-- Queue List -->
+    <template x-if="!loading && books.length > 0">
+        <div class="queue-list" id="queueList" data-aos="fade-up">
+            <template x-for="(book, index) in books" :key="book.id">
+                <div class="queue-item" :data-id="book.id">
+                    <div class="queue-handle">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+
+                    <span style="font-size: var(--text-lg); color: var(--text-muted); min-width: 30px;"
+                        x-text="(index + 1) + '.'"></span>
+
+                    <template x-if="book.cover_url">
+                        <img :src="book.cover_url" :alt="book.title" class="queue-cover">
+                    </template>
+                    <template x-if="!book.cover_url">
+                        <div class="queue-cover"
+                            style="display: flex; align-items: center; justify-content: center; background: var(--bg-tertiary);">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round" style="color: var(--text-muted);">
+                                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                            </svg>
+                        </div>
+                    </template>
+
+                    <div class="queue-info">
+                        <h4 class="queue-title" x-text="book.title"></h4>
+                        <p class="queue-author" x-text="book.author || 'Autor desconhecido'"></p>
+                        <template x-if="book.pages">
+                            <p style="font-size: var(--text-xs); color: var(--text-muted);"
+                                x-text="book.pages + ' páginas'"></p>
+                        </template>
+                    </div>
+
+                    <div class="queue-priority">
+                        <button class="priority-btn" :class="{ 'active': book.priority === 'high' }"
+                            @click="setPriority(book.id, 'high')" title="Quero muito">🔥</button>
+                        <button class="priority-btn" :class="{ 'active': book.priority === 'normal' }"
+                            @click="setPriority(book.id, 'normal')" title="Normal">🙂</button>
+                        <button class="priority-btn" :class="{ 'active': book.priority === 'low' }"
+                            @click="setPriority(book.id, 'low')" title="Sem pressa">💤</button>
+                    </div>
+
+                    <a :href="'/livro/' + book.id" class="btn btn-secondary btn-icon" title="Ver livro">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                            <circle cx="12" cy="12" r="3"></circle>
+                        </svg>
+                    </a>
+
+                    <button class="btn btn-primary btn-icon" @click="startReading(book.id)" title="Começar a ler">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                        </svg>
+                    </button>
+                </div>
+            </template>
+        </div>
+    </template>
+
+    <!-- Empty State -->
+    <template x-if="!loading && books.length === 0">
+        <div class="empty-state" data-aos="fade-up">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="8" y1="6" x2="21" y2="6"></line>
+                <line x1="8" y1="12" x2="21" y2="12"></line>
+                <line x1="8" y1="18" x2="21" y2="18"></line>
+                <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                <line x1="3" y1="18" x2="3.01" y2="18"></line>
+            </svg>
+            <h3>Sua fila está vazia</h3>
+            <p>Adicione livros com status "Quero Ler" para organizar sua fila.</p>
+            <a href="/livro" class="btn btn-primary" style="margin-top: var(--space-lg);">
+                Adicionar Livro
+            </a>
+        </div>
+    </template>
+
+    <!-- Tips -->
+    <template x-if="!loading && books.length > 0">
+        <div class="card" style="margin-top: var(--space-2xl);" data-aos="fade-up">
+            <h4 style="margin-bottom: var(--space-md);">💡 Dicas</h4>
+            <ul style="color: var(--text-secondary); line-height: 1.8;">
+                <li>Arraste os livros para reorganizar a ordem de leitura</li>
+                <li>Use os indicadores de prioridade: 🔥 Quero muito, 🙂 Normal, 💤 Sem pressa</li>
+                <li>Clique em ▶️ para começar a ler um livro (muda o status para "Lendo")</li>
+            </ul>
+        </div>
+    </template>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function queueApp() {
+        return {
+            loading: true,
+            books: [],
+            sortable: null,
+
+            async init() {
+                await this.loadQueue();
+                this.loading = false;
+
+                // Initialize Sortable after DOM updates
+                this.$nextTick(() => {
+                    this.initSortable();
+                });
+            },
+
+            async loadQueue() {
+                try {
+                    const response = await fetch('/api/queue');
+                    this.books = await response.json();
+                } catch (error) {
+                    console.error('Erro ao carregar fila:', error);
+                    showToast('Erro ao carregar fila', 'error');
+                }
+            },
+
+            initSortable() {
+                const el = document.getElementById('queueList');
+                if (!el) return;
+
+                this.sortable = new Sortable(el, {
+                    animation: 200,
+                    handle: '.queue-handle',
+                    ghostClass: 'sortable-ghost',
+                    onEnd: (evt) => {
+                        this.saveOrder();
+                    }
+                });
+            },
+
+            async saveOrder() {
+                const items = document.querySelectorAll('.queue-item');
+                const order = Array.from(items).map(item => parseInt(item.dataset.id));
+
+                try {
+                    await fetch('/api/queue/reorder', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ order: order })
+                    });
+
+                    // Update local order
+                    this.books.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+
+                    showToast('Ordem atualizada!', 'success');
+                } catch (error) {
+                    console.error('Erro ao salvar ordem:', error);
+                    showToast('Erro ao salvar ordem', 'error');
+                }
+            },
+
+            async setPriority(bookId, priority) {
+                try {
+                    await fetch(`/api/books/${bookId}/priority`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ priority: priority })
+                    });
+
+                    // Update locally
+                    const book = this.books.find(b => b.id === bookId);
+                    if (book) book.priority = priority;
+
+                    showToast('Prioridade atualizada!', 'success');
+                } catch (error) {
+                    console.error('Erro ao atualizar prioridade:', error);
+                    showToast('Erro ao atualizar prioridade', 'error');
+                }
+            },
+
+            async startReading(bookId) {
+                try {
+                    const today = new Date().toISOString().split('T')[0];
+
+                    await fetch(`/api/books/${bookId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            status: 'reading',
+                            start_date: today
+                        })
+                    });
+
+                    showToast('Boa leitura! 📖', 'success');
+
+                    // Reload queue
+                    await this.loadQueue();
+                } catch (error) {
+                    console.error('Erro ao iniciar leitura:', error);
+                    showToast('Erro ao iniciar leitura', 'error');
+                }
+            }
+        };
+    }
+</script>
+{% endblock %}

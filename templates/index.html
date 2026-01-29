@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+
+{% block title %}Início - Biblioteca Pessoal{% endblock %}
+
+{% block content %}
+<div x-data="dashboardApp()" x-init="init()">
+    <!-- Page Header -->
+    <header class="page-header">
+        <h1 class="page-title">Bem-vindo à sua Biblioteca</h1>
+        <p class="page-subtitle">Acompanhe sua jornada literária</p>
+    </header>
+
+    <!-- Quote Banner -->
+    <div class="quote-banner" data-aos="fade-up" x-show="quote">
+        <p class="quote-text">"<span x-text="quote?.quote"></span>"</p>
+        <p class="quote-author">— <span x-text="quote?.author"></span><template x-if="quote?.book">, <em
+                    x-text="quote?.book"></em></template></p>
+    </div>
+
+    <!-- Stats Grid -->
+    <div class="stat-grid">
+        <div class="stat-card" data-aos="fade-up" data-aos-delay="100">
+            <div class="stat-icon">📚</div>
+            <div class="stat-value" x-text="stats.total_books">0</div>
+            <div class="stat-label">Total de Livros</div>
+        </div>
+
+        <div class="stat-card" data-aos="fade-up" data-aos-delay="150">
+            <div class="stat-icon">✅</div>
+            <div class="stat-value" x-text="stats.books_read">0</div>
+            <div class="stat-label">Lidos</div>
+        </div>
+
+        <div class="stat-card" data-aos="fade-up" data-aos-delay="200">
+            <div class="stat-icon">📖</div>
+            <div class="stat-value" x-text="stats.books_reading">0</div>
+            <div class="stat-label">Lendo</div>
+        </div>
+
+        <div class="stat-card" data-aos="fade-up" data-aos-delay="250">
+            <div class="stat-icon">⭐</div>
+            <div class="stat-value" x-text="stats.books_want">0</div>
+            <div class="stat-label">Quero Ler</div>
+        </div>
+
+        <div class="stat-card" data-aos="fade-up" data-aos-delay="300">
+            <div class="stat-icon">📄</div>
+            <div class="stat-value" x-text="stats.avg_pages_day">0</div>
+            <div class="stat-label">Páginas/Dia (média)</div>
+        </div>
+
+        <div class="stat-card" data-aos="fade-up" data-aos-delay="350">
+            <div class="stat-icon">🔥</div>
+            <div class="stat-value" x-text="stats.streak">0</div>
+            <div class="stat-label">Dias Seguidos</div>
+        </div>
+    </div>
+
+    <!-- Current Book -->
+    <template x-if="stats.current_book">
+        <div class="current-book" data-aos="fade-up">
+            <template x-if="stats.current_book.cover_url">
+                <img :src="stats.current_book.cover_url" :alt="stats.current_book.title" class="current-book-cover">
+            </template>
+            <template x-if="!stats.current_book.cover_url">
+                <div class="current-book-cover book-cover-placeholder">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                    </svg>
+                </div>
+            </template>
+            <div class="current-book-info">
+                <p class="current-book-label">📖 Lendo agora</p>
+                <h2 class="current-book-title" x-text="stats.current_book.title"></h2>
+                <p class="current-book-author" x-text="stats.current_book.author"></p>
+
+                <template x-if="stats.current_book.pages">
+                    <div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" :style="'width: ' + getProgress() + '%'"></div>
+                        </div>
+                        <p class="progress-text">
+                            <span x-text="stats.current_book.pages_read || 0"></span> de
+                            <span x-text="stats.current_book.pages"></span> páginas
+                            (<span x-text="getProgress()"></span>%)
+                        </p>
+                    </div>
+                </template>
+
+                <div class="flex gap-md" style="margin-top: var(--space-lg);">
+                    <a :href="'/livro/' + stats.current_book.id" class="btn btn-secondary">
+                        Ver Livro
+                    </a>
+                    <a href="/diario" class="btn btn-primary">
+                        Registrar Leitura
+                    </a>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- Empty State -->
+    <template x-if="!stats.current_book && !loading">
+        <div class="empty-state" data-aos="fade-up">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+            </svg>
+            <h3>Nenhum livro sendo lido</h3>
+            <p>Comece a ler um livro da sua fila para acompanhar seu progresso aqui.</p>
+            <a href="/livro" class="btn btn-primary" style="margin-top: var(--space-lg);">
+                Adicionar Livro
+            </a>
+        </div>
+    </template>
+
+    <!-- Loading -->
+    <template x-if="loading">
+        <div class="loading">
+            <div class="spinner"></div>
+        </div>
+    </template>
+
+    <!-- Quick Actions -->
+    <div class="stat-grid" style="margin-top: var(--space-2xl);" data-aos="fade-up">
+        <a href="/livro" class="card" style="text-decoration: none;">
+            <div class="card-header">
+                <span class="card-icon">➕</span>
+            </div>
+            <h4>Adicionar Livro</h4>
+            <p style="color: var(--text-secondary); font-size: var(--text-sm);">Cadastre um novo livro na sua biblioteca
+            </p>
+        </a>
+
+        <a href="/fila" class="card" style="text-decoration: none;">
+            <div class="card-header">
+                <span class="card-icon">📋</span>
+            </div>
+            <h4>Fila de Leitura</h4>
+            <p style="color: var(--text-secondary); font-size: var(--text-sm);">Organize seus próximos livros</p>
+        </a>
+
+        <a href="/diario" class="card" style="text-decoration: none;">
+            <div class="card-header">
+                <span class="card-icon">📆</span>
+            </div>
+            <h4>Diário de Hoje</h4>
+            <p style="color: var(--text-secondary); font-size: var(--text-sm);">Registre sua leitura do dia</p>
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function dashboardApp() {
+        return {
+            loading: true,
+            stats: {
+                total_books: 0,
+                books_read: 0,
+                books_reading: 0,
+                books_want: 0,
+                pages_today: 0,
+                avg_pages_day: 0,
+                streak: 0,
+                current_book: null
+            },
+            quote: null,
+
+            async init() {
+                await Promise.all([
+                    this.loadStats(),
+                    this.loadQuote()
+                ]);
+                this.loading = false;
+            },
+
+            async loadStats() {
+                try {
+                    const response = await fetch('/api/stats/overview');
+                    this.stats = await response.json();
+                } catch (error) {
+                    console.error('Erro ao carregar estatísticas:', error);
+                }
+            },
+
+            async loadQuote() {
+                try {
+                    const response = await fetch('/api/quote');
+                    this.quote = await response.json();
+                } catch (error) {
+                    console.error('Erro ao carregar citação:', error);
+                }
+            },
+
+            getProgress() {
+                if (!this.stats.current_book || !this.stats.current_book.pages) return 0;
+                const pagesRead = this.stats.current_book.pages_read || 0;
+                return Math.round((pagesRead / this.stats.current_book.pages) * 100);
+            }
+        };
+    }
+</script>
+{% endblock %}

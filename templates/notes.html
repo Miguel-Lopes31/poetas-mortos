@@ -1,0 +1,327 @@
+{% extends "base.html" %}
+
+{% block title %}Notas - Biblioteca Pessoal{% endblock %}
+
+{% block content %}
+<div x-data="notesApp()" x-init="init()">
+    <!-- Page Header -->
+    <header class="page-header">
+        <div class="flex justify-between items-center">
+            <div>
+                <h1 class="page-title">Notas & Marcações</h1>
+                <p class="page-subtitle">Suas reflexões e citações favoritas</p>
+            </div>
+            <button class="btn btn-primary btn-lg" @click="openModal()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                Nova Nota
+            </button>
+        </div>
+    </header>
+
+    <!-- Filters -->
+    <div class="filters-bar" data-aos="fade-up">
+        <div class="filter-group" style="flex: 1;">
+            <select class="form-select" x-model="bookFilter" @change="loadNotes()">
+                <option value="">Todos os livros</option>
+                <template x-for="book in books" :key="book.id">
+                    <option :value="book.id" x-text="book.title"></option>
+                </template>
+            </select>
+        </div>
+
+        <div class="filter-group">
+            <select class="form-select" x-model="typeFilter" @change="loadNotes()">
+                <option value="">Todos os tipos</option>
+                <option value="quote">💬 Citações</option>
+                <option value="thought">💭 Pensamentos</option>
+                <option value="reflection">🔮 Reflexões</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Loading -->
+    <template x-if="loading">
+        <div class="loading">
+            <div class="spinner"></div>
+        </div>
+    </template>
+
+    <!-- Notes Grid -->
+    <template x-if="!loading && notes.length > 0">
+        <div class="notes-grid">
+            <template x-for="(note, index) in notes" :key="note.id">
+                <div class="note-card" :data-aos="'fade-up'" :data-aos-delay="(index % 6) * 50"
+                    @click="openModal(note)">
+
+                    <div class="note-type">
+                        <span x-text="getTypeEmoji(note.type)"></span>
+                        <span x-text="getTypeLabel(note.type)"></span>
+                    </div>
+
+                    <div class="note-content" :class="{ 'quote': note.type === 'quote' }">
+                        <p x-text="note.content"></p>
+                    </div>
+
+                    <div class="note-meta">
+                        <span x-text="note.book_title || 'Sem livro'"></span>
+                        <template x-if="note.page_number">
+                            <span>p. <span x-text="note.page_number"></span></span>
+                        </template>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </template>
+
+    <!-- Empty State -->
+    <template x-if="!loading && notes.length === 0">
+        <div class="empty-state" data-aos="fade-up">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+            </svg>
+            <h3>Nenhuma nota encontrada</h3>
+            <p>Comece a registrar suas citações e reflexões favoritas!</p>
+            <button class="btn btn-primary" style="margin-top: var(--space-lg);" @click="openModal()">
+                Nova Nota
+            </button>
+        </div>
+    </template>
+
+    <!-- Note Modal -->
+    <div class="modal-overlay" :class="{ 'active': modalOpen }" @click.self="closeModal()">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title" x-text="editingNote ? 'Editar Nota' : 'Nova Nota'"></h3>
+                <button class="modal-close" @click="closeModal()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <form @submit.prevent="saveNote()">
+                <div class="form-group">
+                    <label class="form-label">Livro *</label>
+                    <select class="form-select" x-model="form.book_id" required>
+                        <option value="">Selecione um livro...</option>
+                        <template x-for="book in books" :key="book.id">
+                            <option :value="book.id" x-text="book.title"></option>
+                        </template>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Tipo</label>
+                    <div class="flex gap-sm">
+                        <button type="button" class="btn" :class="form.type === 'quote' ? 'btn-primary' : 'btn-outline'"
+                            @click="form.type = 'quote'">
+                            💬 Citação
+                        </button>
+                        <button type="button" class="btn"
+                            :class="form.type === 'thought' ? 'btn-primary' : 'btn-outline'"
+                            @click="form.type = 'thought'">
+                            💭 Pensamento
+                        </button>
+                        <button type="button" class="btn"
+                            :class="form.type === 'reflection' ? 'btn-primary' : 'btn-outline'"
+                            @click="form.type = 'reflection'">
+                            🔮 Reflexão
+                        </button>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Conteúdo *</label>
+                    <textarea class="form-textarea" x-model="form.content" rows="5" required
+                        :placeholder="getPlaceholder()"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Página (opcional)</label>
+                    <input type="number" class="form-input" x-model.number="form.page_number" min="1"
+                        placeholder="Ex: 42">
+                </div>
+
+                <div class="flex gap-md justify-between">
+                    <template x-if="editingNote">
+                        <button type="button" class="btn btn-danger" @click="deleteNote()">
+                            Excluir
+                        </button>
+                    </template>
+                    <template x-if="!editingNote">
+                        <div></div>
+                    </template>
+                    <button type="submit" class="btn btn-primary">
+                        Salvar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function notesApp() {
+        return {
+            loading: true,
+            notes: [],
+            books: [],
+            bookFilter: '',
+            typeFilter: '',
+            modalOpen: false,
+            editingNote: null,
+            form: {
+                book_id: '',
+                type: 'thought',
+                content: '',
+                page_number: null
+            },
+
+            async init() {
+                await Promise.all([
+                    this.loadNotes(),
+                    this.loadBooks()
+                ]);
+                this.loading = false;
+            },
+
+            async loadNotes() {
+                try {
+                    let url = '/api/notes';
+                    const params = new URLSearchParams();
+
+                    if (this.bookFilter) params.append('book_id', this.bookFilter);
+                    if (this.typeFilter) params.append('type', this.typeFilter);
+
+                    if (params.toString()) url += '?' + params.toString();
+
+                    const response = await fetch(url);
+                    this.notes = await response.json();
+                } catch (error) {
+                    console.error('Erro ao carregar notas:', error);
+                    showToast('Erro ao carregar notas', 'error');
+                }
+            },
+
+            async loadBooks() {
+                try {
+                    const response = await fetch('/api/books');
+                    this.books = await response.json();
+                } catch (error) {
+                    console.error('Erro ao carregar livros:', error);
+                }
+            },
+
+            openModal(note = null) {
+                this.editingNote = note;
+
+                if (note) {
+                    this.form = {
+                        book_id: note.book_id,
+                        type: note.type,
+                        content: note.content,
+                        page_number: note.page_number
+                    };
+                } else {
+                    this.form = {
+                        book_id: this.bookFilter || '',
+                        type: 'thought',
+                        content: '',
+                        page_number: null
+                    };
+                }
+
+                this.modalOpen = true;
+            },
+
+            closeModal() {
+                this.modalOpen = false;
+                this.editingNote = null;
+            },
+
+            async saveNote() {
+                if (!this.form.book_id || !this.form.content) {
+                    showToast('Preencha os campos obrigatórios', 'error');
+                    return;
+                }
+
+                try {
+                    const url = this.editingNote
+                        ? `/api/notes/${this.editingNote.id}`
+                        : '/api/notes';
+                    const method = this.editingNote ? 'PUT' : 'POST';
+
+                    const response = await fetch(url, {
+                        method: method,
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(this.form)
+                    });
+
+                    if (!response.ok) throw new Error('Erro ao salvar');
+
+                    showToast('Nota salva!', 'success');
+                    this.closeModal();
+                    await this.loadNotes();
+                } catch (error) {
+                    console.error('Erro ao salvar nota:', error);
+                    showToast('Erro ao salvar nota', 'error');
+                }
+            },
+
+            async deleteNote() {
+                if (!confirm('Tem certeza que deseja excluir esta nota?')) return;
+
+                try {
+                    await fetch(`/api/notes/${this.editingNote.id}`, {
+                        method: 'DELETE'
+                    });
+
+                    showToast('Nota excluída!', 'success');
+                    this.closeModal();
+                    await this.loadNotes();
+                } catch (error) {
+                    console.error('Erro ao excluir nota:', error);
+                    showToast('Erro ao excluir nota', 'error');
+                }
+            },
+
+            getTypeEmoji(type) {
+                const emojis = {
+                    'quote': '💬',
+                    'thought': '💭',
+                    'reflection': '🔮'
+                };
+                return emojis[type] || '📝';
+            },
+
+            getTypeLabel(type) {
+                const labels = {
+                    'quote': 'Citação',
+                    'thought': 'Pensamento',
+                    'reflection': 'Reflexão'
+                };
+                return labels[type] || type;
+            },
+
+            getPlaceholder() {
+                const placeholders = {
+                    'quote': 'Digite a citação do livro...',
+                    'thought': 'O que você está pensando sobre este livro?',
+                    'reflection': 'Compartilhe suas reflexões...'
+                };
+                return placeholders[this.form.type] || 'Escreva sua nota...';
+            }
+        };
+    }
+</script>
+{% endblock %}

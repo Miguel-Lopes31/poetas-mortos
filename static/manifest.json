@@ -1,0 +1,28 @@
+{
+    "name": "Biblioteca Pessoal",
+    "short_name": "Biblioteca",
+    "description": "Organize sua coleção de livros e acompanhe suas leituras",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#F5F0E8",
+    "theme_color": "#7A8B6D",
+    "orientation": "portrait-primary",
+    "scope": "/",
+    "lang": "pt-BR",
+    "categories": [
+        "books",
+        "lifestyle",
+        "productivity"
+    ],
+    "icons": [
+        {
+            "src": "/static/logo.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable"
+        }
+    ],
+    "screenshots": [],
+    "prefer_related_applications": false,
+    "related_applications": []
+}

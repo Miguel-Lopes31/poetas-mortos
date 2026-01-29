@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+
+{% block title %}Biblioteca - Biblioteca Pessoal{% endblock %}
+
+{% block content %}
+<div x-data="libraryApp()" x-init="init()">
+    <!-- Page Header -->
+    <header class="page-header">
+        <div class="flex justify-between items-center">
+            <div>
+                <h1 class="page-title">Minha Biblioteca</h1>
+                <p class="page-subtitle"><span x-text="books.length"></span> livros na coleção</p>
+            </div>
+            <a href="/livro" class="btn btn-primary btn-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                Adicionar Livro
+            </a>
+        </div>
+    </header>
+
+    <!-- Filters -->
+    <div class="filters-bar" data-aos="fade-up">
+        <div class="search-input">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input type="text" class="form-input" placeholder="Buscar por título ou autor..." x-model="searchQuery"
+                @input="filterBooks()">
+        </div>
+
+        <div class="filter-group">
+            <select class="form-select" x-model="statusFilter" @change="filterBooks()">
+                <option value="">Todos os status</option>
+                <option value="read">✅ Lidos</option>
+                <option value="reading">📖 Lendo</option>
+                <option value="want_to_read">⭐ Quero ler</option>
+            </select>
+        </div>
+
+        <div class="filter-group">
+            <select class="form-select" x-model="authorFilter" @change="filterBooks()">
+                <option value="">Todos os autores</option>
+                <template x-for="author in filters.authors" :key="author">
+                    <option :value="author" x-text="author"></option>
+                </template>
+            </select>
+        </div>
+
+        <div class="filter-group">
+            <select class="form-select" x-model="publisherFilter" @change="filterBooks()">
+                <option value="">Todas as editoras</option>
+                <template x-for="publisher in filters.publishers" :key="publisher">
+                    <option :value="publisher" x-text="publisher"></option>
+                </template>
+            </select>
+        </div>
+
+        <div class="filter-group">
+            <select class="form-select" x-model="genreFilter" @change="filterBooks()">
+                <option value="">Todos os gêneros</option>
+                <template x-for="genre in filters.genres" :key="genre">
+                    <option :value="genre" x-text="genre"></option>
+                </template>
+            </select>
+        </div>
+    </div>
+
+    <!-- Loading -->
+    <template x-if="loading">
+        <div class="loading">
+            <div class="spinner"></div>
+        </div>
+    </template>
+
+    <!-- Books Grid -->
+    <template x-if="!loading && filteredBooks.length > 0">
+        <div class="book-grid">
+            <template x-for="(book, index) in filteredBooks" :key="book.id">
+                <div class="book-card" @click="window.location.href = '/livro/' + book.id" :data-aos="'fade-up'"
+                    :data-aos-delay="(index % 6) * 50">
+
+                    <template x-if="book.cover_url">
+                        <img :src="book.cover_url" :alt="book.title" class="book-cover">
+                    </template>
+                    <template x-if="!book.cover_url">
+                        <div class="book-cover-placeholder">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                            </svg>
+                            <span style="font-size: var(--text-xs);">Sem capa</span>
+                        </div>
+                    </template>
+
+                    <div class="book-info">
+                        <h3 class="book-title" x-text="book.title"></h3>
+                        <p class="book-author" x-text="book.author || 'Autor desconhecido'"></p>
+
+                        <div class="book-meta">
+                            <span class="book-status" :class="book.status">
+                                <span x-text="getStatusEmoji(book.status)"></span>
+                                <span x-text="getStatusLabel(book.status)"></span>
+                            </span>
+
+                            <template x-if="book.rating">
+                                <div class="book-rating">
+                                    <template x-for="i in 5" :key="i">
+                                        <span class="star" :class="{ 'filled': i <= book.rating }">★</span>
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </template>
+
+    <!-- Empty State -->
+    <template x-if="!loading && filteredBooks.length === 0">
+        <div class="empty-state" data-aos="fade-up">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+            </svg>
+            <template x-if="books.length === 0">
+                <div>
+                    <h3>Sua biblioteca está vazia</h3>
+                    <p>Comece adicionando seu primeiro livro!</p>
+                </div>
+            </template>
+            <template x-if="books.length > 0">
+                <div>
+                    <h3>Nenhum livro encontrado</h3>
+                    <p>Tente ajustar os filtros de busca.</p>
+                </div>
+            </template>
+            <a href="/livro" class="btn btn-primary" style="margin-top: var(--space-lg);">
+                Adicionar Livro
+            </a>
+        </div>
+    </template>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function libraryApp() {
+        return {
+            loading: true,
+            books: [],
+            filteredBooks: [],
+            filters: {
+                authors: [],
+                publishers: [],
+                genres: []
+            },
+            searchQuery: '',
+            statusFilter: '',
+            authorFilter: '',
+            publisherFilter: '',
+            genreFilter: '',
+
+            async init() {
+                await Promise.all([
+                    this.loadBooks(),
+                    this.loadFilters()
+                ]);
+                this.loading = false;
+            },
+
+            async loadBooks() {
+                try {
+                    const response = await fetch('/api/books');
+                    this.books = await response.json();
+                    this.filteredBooks = [...this.books];
+                } catch (error) {
+                    console.error('Erro ao carregar livros:', error);
+                    showToast('Erro ao carregar livros', 'error');
+                }
+            },
+
+            async loadFilters() {
+                try {
+                    const response = await fetch('/api/filters');
+                    this.filters = await response.json();
+                } catch (error) {
+                    console.error('Erro ao carregar filtros:', error);
+                }
+            },
+
+            filterBooks() {
+                this.filteredBooks = this.books.filter(book => {
+                    // Search filter
+                    if (this.searchQuery) {
+                        const query = this.searchQuery.toLowerCase();
+                        const matchTitle = book.title?.toLowerCase().includes(query);
+                        const matchAuthor = book.author?.toLowerCase().includes(query);
+                        if (!matchTitle && !matchAuthor) return false;
+                    }
+
+                    // Status filter
+                    if (this.statusFilter && book.status !== this.statusFilter) {
+                        return false;
+                    }
+
+                    // Author filter
+                    if (this.authorFilter && book.author !== this.authorFilter) {
+                        return false;
+                    }
+
+                    // Publisher filter
+                    if (this.publisherFilter && book.publisher !== this.publisherFilter) {
+                        return false;
+                    }
+
+                    // Genre filter
+                    if (this.genreFilter && book.genre !== this.genreFilter) {
+                        return false;
+                    }
+
+                    return true;
+                });
+            },
+
+            getStatusEmoji(status) {
+                const emojis = {
+                    'read': '✅',
+                    'reading': '📖',
+                    'want_to_read': '⭐'
+                };
+                return emojis[status] || '📚';
+            },
+
+            getStatusLabel(status) {
+                const labels = {
+                    'read': 'Lido',
+                    'reading': 'Lendo',
+                    'want_to_read': 'Quero ler'
+                };
+                return labels[status] || status;
+            }
+        };
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,361 @@
+{% extends "base.html" %}
+
+{% block title %}Estatísticas - Biblioteca Pessoal{% endblock %}
+
+{% block content %}
+<div x-data="statsApp()" x-init="init()">
+    <!-- Page Header -->
+    <header class="page-header">
+        <h1 class="page-title">Estatísticas</h1>
+        <p class="page-subtitle">Acompanhe seus hábitos de leitura</p>
+    </header>
+
+    <!-- Loading -->
+    <template x-if="loading">
+        <div class="loading">
+            <div class="spinner"></div>
+        </div>
+    </template>
+
+    <template x-if="!loading">
+        <div>
+            <!-- Overview Stats -->
+            <div class="stat-grid" data-aos="fade-up">
+                <div class="stat-card">
+                    <div class="stat-icon">📚</div>
+                    <div class="stat-value" x-text="overview.total_books">0</div>
+                    <div class="stat-label">Total de Livros</div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon">✅</div>
+                    <div class="stat-value" x-text="overview.books_read">0</div>
+                    <div class="stat-label">Livros Lidos</div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon">📄</div>
+                    <div class="stat-value" x-text="overview.avg_pages_day">0</div>
+                    <div class="stat-label">Páginas/Dia</div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon">⏱️</div>
+                    <div class="stat-value" x-text="readingTime.avg_days">0</div>
+                    <div class="stat-label">Dias p/ Terminar</div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon">💰</div>
+                    <div class="stat-value">R$ <span x-text="formatMoney(spending.total)">0</span></div>
+                    <div class="stat-label">Investido em Livros</div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon">🔥</div>
+                    <div class="stat-value" x-text="overview.streak">0</div>
+                    <div class="stat-label">Sequência Atual</div>
+                </div>
+            </div>
+
+            <!-- Charts -->
+            <div class="charts-grid">
+                <!-- Pages by Period -->
+                <div class="chart-card" data-aos="fade-up" data-aos-delay="100">
+                    <div class="flex justify-between items-center" style="margin-bottom: var(--space-lg);">
+                        <h3 class="chart-title mb-0">📈 Páginas Lidas</h3>
+                        <select class="form-select" style="width: auto;" x-model="pagesPeriod"
+                            @change="loadPagesStats()">
+                            <option value="day">Por dia</option>
+                            <option value="month">Por mês</option>
+                            <option value="year">Por ano</option>
+                        </select>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="pagesChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Books by Publisher -->
+                <div class="chart-card" data-aos="fade-up" data-aos-delay="150">
+                    <h3 class="chart-title">📚 Livros por Editora</h3>
+                    <div class="chart-container">
+                        <canvas id="publishersChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Spending Over Time -->
+                <div class="chart-card" data-aos="fade-up" data-aos-delay="200">
+                    <h3 class="chart-title">💰 Gastos Mensais</h3>
+                    <div class="chart-container">
+                        <canvas id="spendingChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Reading Time by Book -->
+                <div class="chart-card" data-aos="fade-up" data-aos-delay="250">
+                    <h3 class="chart-title">⏱️ Tempo de Leitura por Livro</h3>
+                    <template x-if="readingTime.books && readingTime.books.length > 0">
+                        <div style="max-height: 250px; overflow-y: auto;">
+                            <template x-for="book in readingTime.books" :key="book.title">
+                                <div
+                                    style="display: flex; align-items: center; gap: var(--space-md); padding: var(--space-sm) 0; border-bottom: 1px solid var(--border-color-light);">
+                                    <div style="flex: 1;">
+                                        <p style="font-weight: 500;" x-text="book.title"></p>
+                                        <p style="font-size: var(--text-sm); color: var(--text-secondary);"
+                                            x-text="book.pages + ' páginas'"></p>
+                                    </div>
+                                    <div style="text-align: right;">
+                                        <p style="font-weight: 600; color: var(--accent-primary);"
+                                            x-text="book.days + ' dias'"></p>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                    <template x-if="!readingTime.books || readingTime.books.length === 0">
+                        <p style="color: var(--text-secondary); text-align: center; padding: var(--space-xl);">
+                            Nenhum livro completado ainda.
+                        </p>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </template>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function statsApp() {
+        return {
+            loading: true,
+            overview: {},
+            pagesData: [],
+            publishersData: [],
+            spending: { total: 0, monthly: [] },
+            readingTime: { avg_days: 0, books: [] },
+            pagesPeriod: 'day',
+            pagesChart: null,
+            publishersChart: null,
+            spendingChart: null,
+
+            async init() {
+                await Promise.all([
+                    this.loadOverview(),
+                    this.loadPagesStats(),
+                    this.loadPublishersStats(),
+                    this.loadSpendingStats(),
+                    this.loadReadingTimeStats()
+                ]);
+
+                this.loading = false;
+
+                this.$nextTick(() => {
+                    this.createCharts();
+                });
+            },
+
+            async loadOverview() {
+                try {
+                    const response = await fetch('/api/stats/overview');
+                    this.overview = await response.json();
+                } catch (error) {
+                    console.error('Erro ao carregar visão geral:', error);
+                }
+            },
+
+            async loadPagesStats() {
+                try {
+                    const response = await fetch(`/api/stats/pages?period=${this.pagesPeriod}`);
+                    this.pagesData = await response.json();
+
+                    if (this.pagesChart) {
+                        this.updatePagesChart();
+                    }
+                } catch (error) {
+                    console.error('Erro ao carregar estatísticas de páginas:', error);
+                }
+            },
+
+            async loadPublishersStats() {
+                try {
+                    const response = await fetch('/api/stats/publishers');
+                    this.publishersData = await response.json();
+                } catch (error) {
+                    console.error('Erro ao carregar estatísticas de editoras:', error);
+                }
+            },
+
+            async loadSpendingStats() {
+                try {
+                    const response = await fetch('/api/stats/spending');
+                    this.spending = await response.json();
+                } catch (error) {
+                    console.error('Erro ao carregar estatísticas de gastos:', error);
+                }
+            },
+
+            async loadReadingTimeStats() {
+                try {
+                    const response = await fetch('/api/stats/reading-time');
+                    this.readingTime = await response.json();
+                } catch (error) {
+                    console.error('Erro ao carregar estatísticas de tempo:', error);
+                }
+            },
+
+            createCharts() {
+                const chartColors = {
+                    primary: 'rgba(122, 139, 109, 0.8)',
+                    primaryLight: 'rgba(122, 139, 109, 0.2)',
+                    secondary: 'rgba(166, 124, 82, 0.8)',
+                    secondaryLight: 'rgba(166, 124, 82, 0.2)',
+                    palette: [
+                        'rgba(122, 139, 109, 0.8)',
+                        'rgba(166, 124, 82, 0.8)',
+                        'rgba(139, 158, 181, 0.8)',
+                        'rgba(168, 168, 168, 0.8)',
+                        'rgba(201, 165, 119, 0.8)'
+                    ]
+                };
+
+                // Get computed styles for text color
+                const textColor = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#6B6B6B';
+                const gridColor = getComputedStyle(document.documentElement).getPropertyValue('--border-color-light').trim() || '#EDE7DC';
+
+                const commonOptions = {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                color: gridColor
+                            },
+                            ticks: {
+                                color: textColor
+                            }
+                        },
+                        y: {
+                            grid: {
+                                color: gridColor
+                            },
+                            ticks: {
+                                color: textColor
+                            }
+                        }
+                    }
+                };
+
+                // Pages Chart
+                const pagesCtx = document.getElementById('pagesChart');
+                if (pagesCtx) {
+                    this.pagesChart = new Chart(pagesCtx, {
+                        type: 'bar',
+                        data: {
+                            labels: this.getPagesLabels(),
+                            datasets: [{
+                                data: this.pagesData.map(d => d.pages),
+                                backgroundColor: chartColors.primary,
+                                borderColor: chartColors.primary,
+                                borderRadius: 4
+                            }]
+                        },
+                        options: commonOptions
+                    });
+                }
+
+                // Publishers Chart
+                const publishersCtx = document.getElementById('publishersChart');
+                if (publishersCtx && this.publishersData.length > 0) {
+                    new Chart(publishersCtx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: this.publishersData.map(d => d.publisher),
+                            datasets: [{
+                                data: this.publishersData.map(d => d.count),
+                                backgroundColor: chartColors.palette,
+                                borderWidth: 0
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    position: 'right',
+                                    labels: {
+                                        color: textColor,
+                                        padding: 15,
+                                        font: {
+                                            size: 12
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+
+                // Spending Chart
+                const spendingCtx = document.getElementById('spendingChart');
+                if (spendingCtx) {
+                    new Chart(spendingCtx, {
+                        type: 'line',
+                        data: {
+                            labels: this.spending.monthly.map(d => this.formatMonth(d.month)),
+                            datasets: [{
+                                data: this.spending.monthly.map(d => d.amount),
+                                borderColor: chartColors.secondary,
+                                backgroundColor: chartColors.secondaryLight,
+                                fill: true,
+                                tension: 0.3,
+                                pointBackgroundColor: chartColors.secondary
+                            }]
+                        },
+                        options: commonOptions
+                    });
+                }
+            },
+
+            updatePagesChart() {
+                if (!this.pagesChart) return;
+
+                this.pagesChart.data.labels = this.getPagesLabels();
+                this.pagesChart.data.datasets[0].data = this.pagesData.map(d => d.pages);
+                this.pagesChart.update();
+            },
+
+            getPagesLabels() {
+                if (this.pagesPeriod === 'day') {
+                    return this.pagesData.map(d => {
+                        const date = new Date(d.date);
+                        return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+                    });
+                } else if (this.pagesPeriod === 'month') {
+                    return this.pagesData.map(d => this.formatMonth(d.month));
+                } else {
+                    return this.pagesData.map(d => d.year.toString());
+                }
+            },
+
+            formatMonth(monthStr) {
+                if (!monthStr) return '';
+                const [year, month] = monthStr.split('-');
+                const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+                return `${months[parseInt(month) - 1]}/${year.slice(2)}`;
+            },
+
+            formatMoney(value) {
+                if (!value) return '0,00';
+                return value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            }
+        };
+    }
+</script>
+{% endblock %}
