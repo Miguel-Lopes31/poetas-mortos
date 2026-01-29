@@ -222,6 +222,36 @@
         📴 Você está offline. Algumas funcionalidades podem estar limitadas.
     </div>
 
+    <!-- PWA Install Banner -->
+    <div class="pwa-install-banner" id="pwaInstallBanner">
+        <div class="pwa-banner-content">
+            <div class="pwa-banner-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+            </div>
+            <div class="pwa-banner-text">
+                <h3>Instale o App!</h3>
+                <p>Acesse sua biblioteca de qualquer lugar, mesmo offline</p>
+            </div>
+        </div>
+        <div class="pwa-banner-actions">
+            <button class="pwa-install-btn" id="pwaInstallBtn">
+                Instalar
+            </button>
+            <button class="pwa-dismiss-btn" id="pwaDismissBtn" title="Fechar">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        </div>
+    </div>
+
     <!-- Bottom Navigation for Mobile -->
     <nav class="bottom-nav">
         <a href="/" class="bottom-nav-item {% if request.endpoint == 'index' %}active{% endif %}">
@@ -299,29 +329,121 @@
             });
         }
 
-        // Prompt de instalação PWA
-        let deferredPrompt;
+        // PWA Install Banner Logic
+        let deferredPrompt = null;
+        const pwaInstallBanner = document.getElementById('pwaInstallBanner');
+        const pwaInstallBtn = document.getElementById('pwaInstallBtn');
+        const pwaDismissBtn = document.getElementById('pwaDismissBtn');
+        const sidebarInstallBtn = document.getElementById('installBtn');
+
+        // Check if user dismissed the banner recently (within 7 days)
+        function shouldShowBanner() {
+            const dismissedAt = localStorage.getItem('pwa-banner-dismissed');
+            if (dismissedAt) {
+                const dismissedDate = new Date(parseInt(dismissedAt));
+                const now = new Date();
+                const daysDiff = (now - dismissedDate) / (1000 * 60 * 60 * 24);
+                if (daysDiff < 7) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // Show the install banner
+        function showInstallBanner() {
+            if (pwaInstallBanner && shouldShowBanner()) {
+                pwaInstallBanner.classList.add('visible');
+                document.body.classList.add('pwa-banner-visible');
+            }
+            // Also show sidebar button
+            if (sidebarInstallBtn) {
+                sidebarInstallBtn.style.display = 'flex';
+            }
+        }
+
+        // Hide the install banner with animation
+        function hideInstallBanner(saveDismissal = false) {
+            if (pwaInstallBanner) {
+                pwaInstallBanner.classList.add('hiding');
+                setTimeout(() => {
+                    pwaInstallBanner.classList.remove('visible', 'hiding');
+                    document.body.classList.remove('pwa-banner-visible');
+                }, 300);
+            }
+            if (saveDismissal) {
+                localStorage.setItem('pwa-banner-dismissed', Date.now().toString());
+            }
+        }
+
+        // Handle install button click
+        async function handleInstall() {
+            if (!deferredPrompt) return;
+
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+            console.log(`Usuário ${outcome === 'accepted' ? 'aceitou' : 'recusou'} a instalação`);
+
+            if (outcome === 'accepted') {
+                // Hide banner and sidebar button permanently
+                hideInstallBanner();
+                if (sidebarInstallBtn) {
+                    sidebarInstallBtn.style.display = 'none';
+                }
+                // Mark as installed
+                localStorage.setItem('pwa-installed', 'true');
+            }
+
+            deferredPrompt = null;
+        }
+
+        // Listen for beforeinstallprompt event
         window.addEventListener('beforeinstallprompt', (e) => {
             e.preventDefault();
             deferredPrompt = e;
 
-            // Mostrar botão de instalação se não existir
-            const installBtn = document.getElementById('installBtn');
-            if (installBtn) {
-                installBtn.style.display = 'flex';
-                installBtn.addEventListener('click', async () => {
-                    deferredPrompt.prompt();
-                    const { outcome } = await deferredPrompt.userChoice;
-                    console.log(`Usuário ${outcome === 'accepted' ? 'aceitou' : 'recusou'} a instalação`);
-                    deferredPrompt = null;
-                    installBtn.style.display = 'none';
-                });
-            }
+            // Show the install banner automatically
+            showInstallBanner();
         });
 
-        // Detectar se está rodando como PWA
-        if (window.matchMedia('(display-mode: standalone)').matches) {
+        // Attach event listeners
+        if (pwaInstallBtn) {
+            pwaInstallBtn.addEventListener('click', handleInstall);
+        }
+
+        if (pwaDismissBtn) {
+            pwaDismissBtn.addEventListener('click', () => {
+                hideInstallBanner(true); // Save dismissal
+            });
+        }
+
+        if (sidebarInstallBtn) {
+            sidebarInstallBtn.addEventListener('click', handleInstall);
+        }
+
+        // Listen for app installed event
+        window.addEventListener('appinstalled', () => {
+            console.log('PWA instalado com sucesso!');
+            hideInstallBanner();
+            if (sidebarInstallBtn) {
+                sidebarInstallBtn.style.display = 'none';
+            }
+            localStorage.setItem('pwa-installed', 'true');
+            deferredPrompt = null;
+        });
+
+        // Detectar se está rodando como PWA (já instalado)
+        if (window.matchMedia('(display-mode: standalone)').matches ||
+            window.navigator.standalone === true ||
+            localStorage.getItem('pwa-installed') === 'true') {
             document.body.classList.add('pwa-mode');
+            // Don't show install prompts if already installed
+            if (pwaInstallBanner) {
+                pwaInstallBanner.style.display = 'none';
+            }
+            if (sidebarInstallBtn) {
+                sidebarInstallBtn.style.display = 'none';
+            }
         }
     </script>
 

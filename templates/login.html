@@ -224,6 +224,36 @@
         </div>
     </div>
 
+    <!-- PWA Install Banner -->
+    <div class="pwa-install-banner" id="pwaInstallBanner">
+        <div class="pwa-banner-content">
+            <div class="pwa-banner-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+            </div>
+            <div class="pwa-banner-text">
+                <h3>Instale o App!</h3>
+                <p>Acesse sua biblioteca de qualquer lugar, mesmo offline</p>
+            </div>
+        </div>
+        <div class="pwa-banner-actions">
+            <button class="pwa-install-btn" id="pwaInstallBtn">
+                Instalar
+            </button>
+            <button class="pwa-dismiss-btn" id="pwaDismissBtn" title="Fechar">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        </div>
+    </div>
+
     <script>
         function loginApp() {
             return {
@@ -263,6 +293,113 @@
                     }
                 }
             };
+        }
+    </script>
+
+    <!-- PWA Service Worker and Install Banner -->
+    <script>
+        // Registrar Service Worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function () {
+                navigator.serviceWorker.register('/static/sw.js')
+                    .then(function (registration) {
+                        console.log('ServiceWorker registrado com sucesso:', registration.scope);
+                    })
+                    .catch(function (error) {
+                        console.log('Falha ao registrar ServiceWorker:', error);
+                    });
+            });
+        }
+
+        // PWA Install Banner Logic
+        let deferredPrompt = null;
+        const pwaInstallBanner = document.getElementById('pwaInstallBanner');
+        const pwaInstallBtn = document.getElementById('pwaInstallBtn');
+        const pwaDismissBtn = document.getElementById('pwaDismissBtn');
+
+        // Check if user dismissed the banner recently (within 7 days)
+        function shouldShowBanner() {
+            const dismissedAt = localStorage.getItem('pwa-banner-dismissed');
+            if (dismissedAt) {
+                const dismissedDate = new Date(parseInt(dismissedAt));
+                const now = new Date();
+                const daysDiff = (now - dismissedDate) / (1000 * 60 * 60 * 24);
+                if (daysDiff < 7) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // Show the install banner
+        function showInstallBanner() {
+            if (pwaInstallBanner && shouldShowBanner()) {
+                pwaInstallBanner.classList.add('visible');
+            }
+        }
+
+        // Hide the install banner with animation
+        function hideInstallBanner(saveDismissal = false) {
+            if (pwaInstallBanner) {
+                pwaInstallBanner.classList.add('hiding');
+                setTimeout(() => {
+                    pwaInstallBanner.classList.remove('visible', 'hiding');
+                }, 300);
+            }
+            if (saveDismissal) {
+                localStorage.setItem('pwa-banner-dismissed', Date.now().toString());
+            }
+        }
+
+        // Handle install button click
+        async function handleInstall() {
+            if (!deferredPrompt) return;
+
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+            console.log(`Usuário ${outcome === 'accepted' ? 'aceitou' : 'recusou'} a instalação`);
+
+            if (outcome === 'accepted') {
+                hideInstallBanner();
+                localStorage.setItem('pwa-installed', 'true');
+            }
+
+            deferredPrompt = null;
+        }
+
+        // Listen for beforeinstallprompt event
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            showInstallBanner();
+        });
+
+        // Attach event listeners
+        if (pwaInstallBtn) {
+            pwaInstallBtn.addEventListener('click', handleInstall);
+        }
+
+        if (pwaDismissBtn) {
+            pwaDismissBtn.addEventListener('click', () => {
+                hideInstallBanner(true);
+            });
+        }
+
+        // Listen for app installed event
+        window.addEventListener('appinstalled', () => {
+            console.log('PWA instalado com sucesso!');
+            hideInstallBanner();
+            localStorage.setItem('pwa-installed', 'true');
+            deferredPrompt = null;
+        });
+
+        // Detectar se está rodando como PWA (já instalado)
+        if (window.matchMedia('(display-mode: standalone)').matches ||
+            window.navigator.standalone === true ||
+            localStorage.getItem('pwa-installed') === 'true') {
+            if (pwaInstallBanner) {
+                pwaInstallBanner.style.display = 'none';
+            }
         }
     </script>
 </body>
